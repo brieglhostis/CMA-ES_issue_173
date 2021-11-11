@@ -4538,7 +4538,7 @@ def _al_set_logging(al, kwargs):
         al.logging = logging
 
 def fmin_con(objective_function, x0, sigma0,
-             g=no_constraints, h=no_constraints, **kwargs):
+             g=no_constraints, h=no_constraints, post_optimization=False, **kwargs):
     """optimize f with constraints g (inequalities) and h (equalities).
 
     Construct an Augmented Lagrangian instance ``f_aug_lag`` of the type
@@ -4646,4 +4646,33 @@ def fmin_con(objective_function, x0, sigma0,
     es.objective_function_complements = [_al]
     es.augmented_lagrangian = _al
     es.best_feasible = best_feasible_solution
+
+    if post_optimization:
+
+        x_post_opt, es_post_opt = fmin_con(lambda x: np.sum(np.square(g(x))),
+                                           es.result.xfavorite, sigma0, g=g, h=h, **kwargs)
+        f_x_post_opt = objective_function(x_post_opt)
+
+        print("\nOptimization results:")
+        print("x", es.result.xfavorite)
+        print("f(x)", es.best_feasible.f)
+        print("Best feasible:", es.best_feasible)
+        print("")
+
+        print("\nPost optimization results:")
+        print("x_post_opt", x_post_opt)
+        print("f(x_post_opt)", f_x_post_opt)
+        print("Best feasible:", es_post_opt.best_feasible)
+        print("")
+
+        if es_post_opt.best_feasible.info is not None and f_x_post_opt < es.best_feasible.f:
+            best_feasible_solution_post_opt = ot.BestSolution2()
+            best_feasible_solution_post_opt.update(
+                f_x_post_opt,  info={
+                    'x': x_post_opt,
+                    'f': f_x_post_opt,
+                    'g': es_post_opt.best_feasible.info["g"],
+                    'g_al': es_post_opt.best_feasible.info["g_al"]})
+            es.best_feasible_post_opt = best_feasible_solution_post_opt
+
     return es.result.xfavorite, es
