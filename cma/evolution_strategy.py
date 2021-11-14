@@ -4649,17 +4649,42 @@ def fmin_con(objective_function, x0, sigma0,
 
     if post_optimization:
 
+        print("\nOptimization results:")
+        print("x", es.best_feasible.info["x"], "xfavorite", es.result.xfavorite)
+        print("f(x)", es.best_feasible.f, "f(xfavorite)", objective_function(es.result.xfavorite))
+        print("g(x)", g(es.best_feasible.info["x"]),
+              "g(xfavorite)", g(es.result.xfavorite))
+        print("Best feasible:", es.best_feasible)
+        print("")
+
+        # Option 1: objective_function(x) = sum g_i(x)**2 for all i
         x_post_opt, es_post_opt = fmin_con(lambda x: np.sum(np.square(g(x))),
                                            es.result.xfavorite, sigma0, g=g, h=h, **kwargs)
         f_x_post_opt = objective_function(x_post_opt)
 
-        print("\nOptimization results:")
-        print("x", es.result.xfavorite)
-        print("f(x)", es.best_feasible.f)
-        print("Best feasible:", es.best_feasible)
+        print("\nPost optimization results (option 1):")
+        print("x_post_opt", x_post_opt)
+        print("f(x_post_opt)", f_x_post_opt)
+        print("Best feasible:", es_post_opt.best_feasible)
         print("")
 
-        print("\nPost optimization results:")
+        # Option 2: objective_function(x) = sum g_i(x)**2 for i s.t. g_i(xfavorite) > 0
+        x_post_opt, es_post_opt = fmin_con(lambda x: np.sum(np.square(np.array(g(x))[np.where(np.array(g(es.result.xfavorite)) > 0)])),
+                                           es.result.xfavorite, sigma0, g=g, h=h, **kwargs)
+        f_x_post_opt = objective_function(x_post_opt)
+
+        print("\nPost optimization results (option 2):")
+        print("x_post_opt", x_post_opt)
+        print("f(x_post_opt)", f_x_post_opt)
+        print("Best feasible:", es_post_opt.best_feasible)
+        print("")
+
+        # Option 3: objective_function(x) = sum g(x)**2 for i s.t. g_i(x) > 0
+        x_post_opt, es_post_opt = fmin_con(lambda x: np.sum(np.square(np.array(g(x))[np.where(np.array(g(x)) > 0)])),
+                                           es.result.xfavorite, sigma0, g=g, h=h, **kwargs)
+        f_x_post_opt = objective_function(x_post_opt)
+
+        print("\nPost optimization results (option 3):")
         print("x_post_opt", x_post_opt)
         print("f(x_post_opt)", f_x_post_opt)
         print("Best feasible:", es_post_opt.best_feasible)
