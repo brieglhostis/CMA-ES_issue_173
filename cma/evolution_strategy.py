@@ -4671,6 +4671,7 @@ def fmin_con(objective_function, x0, sigma0,
                     'g_al': es_post_opt.best_feasible.info["g_al"]})
             es.best_feasible_post_opt = best_feasible_solution_post_opt
         else:
-            _warnings.warn('No positive constraint in ``es.results.xfavorite``, skipping post optimization.')
+            utils.print_warning('No positive constraint in ``es.results.xfavorite``, skipping post optimization',
+                                verbose=es.opts['verbose'])
 
     return es.result.xfavorite, es
