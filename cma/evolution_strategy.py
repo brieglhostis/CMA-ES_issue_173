@@ -4660,12 +4660,12 @@ def fmin_con(objective_function, x0, sigma0,
         if len(positive_constraints[0]) > 0:
             x_post_opt, es_post_opt = fmin_con(lambda x: np.sum(np.square(np.array(g(x))[positive_constraints])),
                                                es.result.xfavorite, sigma0, g=g, h=h, **kwargs)
-            f_x_post_opt = objective_function(x_post_opt)
+            f_x_post_opt = objective_function(es_post_opt.best_feasible.info["x"])
 
             best_feasible_solution_post_opt = ot.BestSolution2()
             best_feasible_solution_post_opt.update(
                 f_x_post_opt,  info={
-                    'x': x_post_opt,
+                    'x': es_post_opt.best_feasible.info["x"],
                     'f': f_x_post_opt,
                     'g': es_post_opt.best_feasible.info["g"],
                     'g_al': es_post_opt.best_feasible.info["g_al"]})
