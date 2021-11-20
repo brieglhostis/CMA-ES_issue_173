@@ -172,6 +172,8 @@ in particular `CMAOptions`, `CMAEvolutionStrategy`, and `fmin`
 from __future__ import (absolute_import, division, print_function,
                         )  # unicode_literals, with_statement)
 # from builtins import ...
+import _warnings
+
 from .utilities.python3for2 import range  # redefine range in Python 2
 
 import sys
@@ -4563,6 +4565,12 @@ def fmin_con(objective_function, x0, sigma0,
     constraints (equality constraints are wrongly interpreted as inequality
     constraints).
 
+    If `post_optimization` is set to True, then the second return value will
+    contain another additional attribute ``best_feasible_post_opt`` which
+    contains the information about the best feasible solution obtained by
+    optimizing the sum of the positive constraints squared starting from
+    the point ``es.results.xfavorite``.
+
     See `cma.fmin` for further parameters ``**kwargs``.
 
     >>> import cma
@@ -4648,49 +4656,12 @@ def fmin_con(objective_function, x0, sigma0,
     es.best_feasible = best_feasible_solution
 
     if post_optimization:
+        positive_constraints = np.where(np.array(g(es.result.xfavorite)) > 0)
+        if len(positive_constraints[0]) > 0:
+            x_post_opt, es_post_opt = fmin_con(lambda x: np.sum(np.square(np.array(g(x))[positive_constraints])),
+                                               es.result.xfavorite, sigma0, g=g, h=h, **kwargs)
+            f_x_post_opt = objective_function(x_post_opt)
 
-        print("\nOptimization results:")
-        print("x", es.best_feasible.info["x"], "xfavorite", es.result.xfavorite)
-        print("f(x)", es.best_feasible.f, "f(xfavorite)", objective_function(es.result.xfavorite))
-        print("g(x)", g(es.best_feasible.info["x"]),
-              "g(xfavorite)", g(es.result.xfavorite))
-        print("Best feasible:", es.best_feasible)
-        print("")
-
-        # Option 1: objective_function(x) = sum g_i(x)**2 for all i
-        x_post_opt, es_post_opt = fmin_con(lambda x: np.sum(np.square(g(x))),
-                                           es.result.xfavorite, sigma0, g=g, h=h, **kwargs)
-        f_x_post_opt = objective_function(x_post_opt)
-
-        print("\nPost optimization results (option 1):")
-        print("x_post_opt", x_post_opt)
-        print("f(x_post_opt)", f_x_post_opt)
-        print("Best feasible:", es_post_opt.best_feasible)
-        print("")
-
-        # Option 2: objective_function(x) = sum g_i(x)**2 for i s.t. g_i(xfavorite) > 0
-        x_post_opt, es_post_opt = fmin_con(lambda x: np.sum(np.square(np.array(g(x))[np.where(np.array(g(es.result.xfavorite)) > 0)])),
-                                           es.result.xfavorite, sigma0, g=g, h=h, **kwargs)
-        f_x_post_opt = objective_function(x_post_opt)
-
-        print("\nPost optimization results (option 2):")
-        print("x_post_opt", x_post_opt)
-        print("f(x_post_opt)", f_x_post_opt)
-        print("Best feasible:", es_post_opt.best_feasible)
-        print("")
-
-        # Option 3: objective_function(x) = sum g(x)**2 for i s.t. g_i(x) > 0
-        x_post_opt, es_post_opt = fmin_con(lambda x: np.sum(np.square(np.array(g(x))[np.where(np.array(g(x)) > 0)])),
-                                           es.result.xfavorite, sigma0, g=g, h=h, **kwargs)
-        f_x_post_opt = objective_function(x_post_opt)
-
-        print("\nPost optimization results (option 3):")
-        print("x_post_opt", x_post_opt)
-        print("f(x_post_opt)", f_x_post_opt)
-        print("Best feasible:", es_post_opt.best_feasible)
-        print("")
-
-        if es_post_opt.best_feasible.info is not None and f_x_post_opt < es.best_feasible.f:
             best_feasible_solution_post_opt = ot.BestSolution2()
             best_feasible_solution_post_opt.update(
                 f_x_post_opt,  info={
@@ -4699,5 +4670,7 @@ def fmin_con(objective_function, x0, sigma0,
                     'g': es_post_opt.best_feasible.info["g"],
                     'g_al': es_post_opt.best_feasible.info["g_al"]})
             es.best_feasible_post_opt = best_feasible_solution_post_opt
+        else:
+            _warnings.warn('No positive constraint in ``es.results.xfavorite``, skipping post optimization.')
 
     return es.result.xfavorite, es
