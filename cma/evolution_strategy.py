@@ -4599,6 +4599,14 @@ def fmin_con(objective_function, x0, sigma0,
     True
     >>> # al.logger.plot()  # plots the evolution of AL coefficients
 
+    >>> x, es = cma.evolution_strategy.fmin_con(
+    ...             cma.ff.sphere, 2 * [0], 1, g=lambda x: [y+1 for y in x], post_optimization=True,
+    ...             options={'termination_callback': lambda es: -1e-5 < es.mean[0]**2 < 1e-5,
+    ...                      'seed': 1, 'verbose': -9})
+
+    >>> hasattr(es, 'best_feasible_post_opt')
+    True
+
     """
     # TODO: need to rethink equality/inequality interface?
 
@@ -4658,18 +4666,22 @@ def fmin_con(objective_function, x0, sigma0,
     if post_optimization:
         positive_constraints = np.where(np.array(g(es.result.xfavorite)) > 0)
         if len(positive_constraints[0]) > 0:
-            x_post_opt, es_post_opt = fmin_con(lambda x: np.sum(np.square(np.array(g(x))[positive_constraints])),
-                                               es.result.xfavorite, sigma0, g=g, h=h, **kwargs)
-            f_x_post_opt = objective_function(es_post_opt.best_feasible.info["x"])
+            x_post_opt, es_post_opt = fmin_con(lambda x: np.sum(np.square(np.array(g(x)))),
+                                               es.result.xfavorite, sigma0 / 100, g=g, h=h, **kwargs)
+            if es_post_opt.best_feasible.info is not None:
+                f_x_post_opt = objective_function(es_post_opt.best_feasible.info["x"])
 
-            best_feasible_solution_post_opt = ot.BestSolution2()
-            best_feasible_solution_post_opt.update(
-                f_x_post_opt,  info={
-                    'x': es_post_opt.best_feasible.info["x"],
-                    'f': f_x_post_opt,
-                    'g': es_post_opt.best_feasible.info["g"],
-                    'g_al': es_post_opt.best_feasible.info["g_al"]})
-            es.best_feasible_post_opt = best_feasible_solution_post_opt
+                best_feasible_solution_post_opt = ot.BestSolution2()
+                best_feasible_solution_post_opt.update(
+                    f_x_post_opt,  info={
+                        'x': es_post_opt.best_feasible.info["x"],
+                        'f': f_x_post_opt,
+                        'g': es_post_opt.best_feasible.info["g"],
+                        'g_al': es_post_opt.best_feasible.info["g_al"]})
+                es.best_feasible_post_opt = best_feasible_solution_post_opt
+            else:
+                utils.print_warning('Post optimization was unsuccessful',
+                                    verbose=es.opts['verbose'])
         else:
             utils.print_warning('No positive constraint in ``es.results.xfavorite``, skipping post optimization',
                                 verbose=es.opts['verbose'])
