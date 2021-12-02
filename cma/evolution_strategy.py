@@ -4540,7 +4540,7 @@ def _al_set_logging(al, kwargs):
         al.logging = logging
 
 def fmin_con(objective_function, x0, sigma0,
-             g=no_constraints, h=no_constraints, post_optimization=False, **kwargs):
+             g=no_constraints, h=no_constraints, post_optimization=False, sigma0_post_opt=None, **kwargs):
     """optimize f with constraints g (inequalities) and h (equalities).
 
     Construct an Augmented Lagrangian instance ``f_aug_lag`` of the type
@@ -4569,7 +4569,8 @@ def fmin_con(objective_function, x0, sigma0,
     contain another additional attribute ``best_feasible_post_opt`` which
     contains the information about the best feasible solution obtained by
     optimizing the sum of the positive constraints squared starting from
-    the point ``es.results.xfavorite``.
+    the point ``es.results.xfavorite``. Additionally, the first return value will
+    be the best feasible solution obtained in post-optimization.
 
     See `cma.fmin` for further parameters ``**kwargs``.
 
@@ -4666,19 +4667,16 @@ def fmin_con(objective_function, x0, sigma0,
     if post_optimization:
         positive_constraints = np.where(np.array(g(es.result.xfavorite)) > 0)
         if len(positive_constraints[0]) > 0:
-            x_post_opt, es_post_opt = fmin_con(lambda x: np.sum(np.square(np.array(g(x)))),
-                                               es.result.xfavorite, sigma0 / 100, g=g, h=h, **kwargs)
+            x_post_opt, es_post_opt = fmin_con(lambda x: sum([gi**2 if gi > 0 else 0 for gi in g(x)]),
+                                               es.result.xfavorite, sigma0 / 1000, g=g, h=h, **kwargs_post_opt)
+            print(es_post_opt.best_feasible.info is not None, max(x_post_opt), max(g(x_post_opt)))
             if es_post_opt.best_feasible.info is not None:
                 f_x_post_opt = objective_function(es_post_opt.best_feasible.info["x"])
-
-                best_feasible_solution_post_opt = ot.BestSolution2()
-                best_feasible_solution_post_opt.update(
-                    f_x_post_opt,  info={
-                        'x': es_post_opt.best_feasible.info["x"],
-                        'f': f_x_post_opt,
-                        'g': es_post_opt.best_feasible.info["g"],
-                        'g_al': es_post_opt.best_feasible.info["g_al"]})
-                es.best_feasible_post_opt = best_feasible_solution_post_opt
+                post_opt_info = es_post_opt.best_feasible.info
+                post_opt_info['f'] = f_x_post_opt
+                es.best_feasible_post_opt = ot.BestSolution2()
+                es.best_feasible_post_opt.update(f_x_post_opt, info=post_opt_info)
+                return es_post_opt.best_feasible.info["x"], es
             else:
                 utils.print_warning('Post optimization was unsuccessful',
                                     verbose=es.opts['verbose'])
