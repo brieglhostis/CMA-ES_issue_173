@@ -172,8 +172,6 @@ in particular `CMAOptions`, `CMAEvolutionStrategy`, and `fmin`
 from __future__ import (absolute_import, division, print_function,
                         )  # unicode_literals, with_statement)
 # from builtins import ...
-import _warnings
-
 from .utilities.python3for2 import range  # redefine range in Python 2
 
 import sys
@@ -338,7 +336,7 @@ def is_feasible(x, f):
 
     :See also: CMAOptions, ``CMAOptions('feas')``.
     """
-    return f is not None and not np.isnan(f)
+    return f is not None and not utils.is_nan(f)
 
 
 class _CMASolutionDict_functional(_SolutionDict):
@@ -444,7 +442,7 @@ def cma_default_options_(  # to get keyword completion back
     CMA_dampsvec_fac='np.Inf  # tentative and subject to changes, 0.5 would be a "default" damping for sigma vector update',
     CMA_dampsvec_fade='0.1  # tentative fading out parameter for sigma vector update',
     CMA_teststds='None  # factors for non-isotropic initial distr. of C, mainly for test purpose, see CMA_stds for production',
-    CMA_stds='None  # multipliers for sigma0 in each coordinate, not represented in C, makes scaling_of_variables obsolete',
+    CMA_stds='None  # multipliers for sigma0 in each coordinate, not represented in C, better use `cma.ScaleCoordinates` instead',
     # CMA_AII='False  # not yet tested',
     CSA_dampfac='1  #v positive multiplier for step-size damping, 0.3 is close to optimal on the sphere',
     CSA_damp_mueff_exponent='0.5  # zero would mean no dependency of damping on mueff, useful with CSA_disregard_length option',
@@ -598,7 +596,7 @@ class CMAOptions(dict):
         to date.
 
         The string ' #v ' in the default value indicates a versatile
-        option that can be changed any time, however a string will not 
+        option that can be changed any time, however a string will not
         necessarily be evaluated again.
 
         """
@@ -1615,10 +1613,8 @@ class CMAEvolutionStrategy(interfaces.OOOptimizer):
                 self.sigma_vec *= np.ones(N)  # make sure to get a vector
             self.sigma_vec0 = self.sigma_vec if np.isscalar(self.sigma_vec) \
                                             else self.sigma_vec.copy()
-        stds = eval_vector(self.opts['CMA_teststds'], opts, N)
         if self.opts['CMA_diagonal']:  # is True or > 0
             # linear time and space complexity
-            self.sigma_vec = transformations.DiagonalDecoding(stds * np.ones(N))
             self.sm = sampler.GaussStandardConstant(N, randn=self.opts['randn'])
             self._updateBDfromSM(self.sm)
             if self.opts['CMA_diagonal'] is True:
@@ -1635,6 +1631,7 @@ class CMAEvolutionStrategy(interfaces.OOOptimizer):
                                                       self.sp.c1,
                                                       self.sp.cmu)
         else:
+            stds = eval_vector(self.opts['CMA_teststds'], opts, N)
             if 11 < 3:
                 if hasattr(self.opts['vv'], '__getitem__') and \
                         'sweep_ccov' in self.opts['vv']:
@@ -1805,15 +1802,15 @@ class CMAEvolutionStrategy(interfaces.OOOptimizer):
             self.x0.resize(self.x0.shape[0])  # 1-D array, not really necessary?!
         except NotImplementedError:
             pass
-    
+
     def _copy_light(self, sigma=None, inopts=None):
         """tentative copy of self, versatile (interface and functionalities may change).
-        
+
         `sigma` overwrites the original initial `sigma`.
         `inopts` allows to overwrite any of the original options.
 
         This copy may not work as expected depending on the used sampler.
-        
+
         Copy mean and sample distribution parameters and input options. Do
         not copy evolution paths, termination status or other state variables.
 
@@ -1840,8 +1837,8 @@ class CMAEvolutionStrategy(interfaces.OOOptimizer):
         except: warnings.warn("self.sm.C.copy failed")
         es.sm.update_now(-1)  # make B and D consistent with C
         es._updateBDfromSM()
-        return es    
-    
+        return es
+
     # ____________________________________________________________
     # ____________________________________________________________
     def ask(self, number=None, xmean=None, sigma_fac=1,
@@ -2442,9 +2439,9 @@ class CMAEvolutionStrategy(interfaces.OOOptimizer):
             fit.append(f)
             X.append(x)
         self.evaluations_per_f_value = int(evaluations)
-        if any(f is None or np.isnan(f) for f in fit):
+        if any(f is None or utils.is_nan(f) for f in fit):
             idxs = [i for i in range(len(fit))
-                    if fit[i] is None or np.isnan(fit[i])]
+                    if fit[i] is None or utils.is_nan(fit[i])]
             utils.print_warning("f-values %s contain None or NaN at indices %s"
                                 % (str(fit[:30]) + ('...' if len(fit) > 30 else ''),
                                    str(idxs)),
@@ -2603,19 +2600,19 @@ class CMAEvolutionStrategy(interfaces.OOOptimizer):
                                     method_name='tell', class_name='CMAEvolutionStrategy',
                                     verbose=9, iteration=self.countiter)
                 raise
-        if any(f is None or np.isnan(f) for f in function_values):
+        if any(f is None or utils.is_nan(f) for f in function_values):
             idx_none = [i for i, f in enumerate(function_values) if f is None]
-            idx_nan = [i for i, f in enumerate(function_values) if f is not None and np.isnan(f)]
+            idx_nan = [i for i, f in enumerate(function_values) if f is not None and utils.is_nan(f)]
             m = np.median([f for f in function_values
-                           if f is not None and not np.isnan(f)])
+                           if f is not None and not utils.is_nan(f)])
             utils.print_warning("function values with index %s/%s are nan/None and will be set to the median value %s"
                                 % (str(idx_nan), str(idx_none), str(m)), 'ask',
                                 'CMAEvolutionStrategy', self.countiter)
             for i in idx_nan + idx_none:
                 function_values[i] = m
-        if not np.isfinite(function_values).all():
+        if not all(np.isfinite(float(val)) for val in function_values):
             idx = [i for i, f in enumerate(function_values)
-                   if not np.isfinite(f)]
+                   if not np.isfinite(float(f))]
             utils.print_warning("function values with index %s are not finite but %s."
                                 % (str(idx), str([function_values[i] for i in idx])), 'ask',
                                 'CMAEvolutionStrategy', self.countiter)
@@ -3673,8 +3670,8 @@ class _CMAStopDict(dict):
                           es.timer.elapsed > opts['timeout'],
                           es.timer.elapsed if self._get_value else None)
         except AttributeError:
-            if es.countiter <= 0: 
-                pass 
+            if es.countiter <= 0:
+                pass
             # else: raise
 
         if 11 < 3 and 2 * l < len(es.fit.histbest):  # TODO: this might go wrong, because the nb of written columns changes
@@ -3806,7 +3803,8 @@ class _CMAParameters(object):
         self.N = N
         if ccovfac == 1:
             ccovfac = opts['CMA_on']  # that's a hack
-        self.popsize = None  # type: int - declaring the attribute, not necessary though
+        self.popsize = None  # type: int
+        """number of candidation solutions per iteration, AKA population size"""
         self.set(opts, ccovfac=ccovfac, verbose=verbose)
 
     def set(self, opts, popsize=None, ccovfac=1, verbose=True):
@@ -4540,7 +4538,7 @@ def _al_set_logging(al, kwargs):
         al.logging = logging
 
 def fmin_con(objective_function, x0, sigma0,
-             g=no_constraints, h=no_constraints, post_optimization=False, sigma0_post_opt=None, **kwargs):
+             g=no_constraints, h=no_constraints, post_optimization=False, **kwargs):
     """optimize f with constraints g (inequalities) and h (equalities).
 
     Construct an Augmented Lagrangian instance ``f_aug_lag`` of the type
@@ -4602,8 +4600,7 @@ def fmin_con(objective_function, x0, sigma0,
 
     >>> x, es = cma.evolution_strategy.fmin_con(
     ...             cma.ff.sphere, 2 * [0], 1, g=lambda x: [y+1 for y in x], post_optimization=True,
-    ...             options={'termination_callback': lambda es: -1e-5 < es.mean[0]**2 < 1e-5,
-    ...                      'seed': 1, 'verbose': -9})
+    ...             options={'seed': 1, 'verbose': -9})
 
     >>> hasattr(es, 'best_feasible_post_opt')
     True
@@ -4667,9 +4664,24 @@ def fmin_con(objective_function, x0, sigma0,
     if post_optimization:
         positive_constraints = np.where(np.array(g(es.result.xfavorite)) > 0)
         if len(positive_constraints[0]) > 0:
-            x_post_opt, es_post_opt = fmin_con(lambda x: sum([gi**2 if gi > 0 else 0 for gi in g(x)]),
-                                               es.result.xfavorite, sigma0 / 1000, g=g, h=h, **kwargs)
-            print(es_post_opt.best_feasible.info is not None, max(x_post_opt), max(g(x_post_opt)))
+            kwargs_post_opt = kwargs.copy()
+            if 'options' in kwargs_post_opt:
+                if 'termination_callback' in kwargs_post_opt['options']:
+                    if isinstance(kwargs_post_opt['options']['termination_callback'], list):
+                        kwargs_post_opt['options']['termination_callback'].append(
+                            lambda es: max(g(es.mean)) <= 0)
+                    else:
+                        kwargs_post_opt['options']['termination_callback'] = [
+                            kwargs_post_opt['options']['termination_callback'],
+                            lambda es: max(g(es.mean)) <= 0
+                        ]
+                else:
+                    kwargs_post_opt['options']['termination_callback'] = lambda es: max(g(es.mean)) <= 0
+            else:
+                kwargs_post_opt['options'] = {'termination_callback': lambda es: max(g(es.mean)) <= 0}
+
+            x_post_opt, es_post_opt = fmin_con(lambda x: sum([gi ** 2 if gi > 0 else 0 for gi in g(x)]),
+                                               es.result.xfavorite, sigma0 / 1000, g=g, h=h, **kwargs_post_opt)
             if es_post_opt.best_feasible.info is not None:
                 f_x_post_opt = objective_function(es_post_opt.best_feasible.info["x"])
                 post_opt_info = es_post_opt.best_feasible.info
